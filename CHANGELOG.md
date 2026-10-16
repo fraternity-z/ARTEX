@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+### 项目独立维护（2026-10-17）
+
+- 项目主页、安装、下载、反馈和后续版本链接切换到 `fraternity-z/ARTEX`，保留上游提交历史、历史版本记录及贡献者署名。
+- 在线更新源切换为 `fraternity-z/ARTEX`，沿用现有版本检查、校验和回滚机制。
+- Docker 镜像切换到 `ghcr.io/fraternity-z/artex`；发布工作流使用 `GITHUB_TOKEN` 推送 GHCR，无需 Docker Hub 凭据。
+- 保留在线 Demo 部署流程，未配置本仓库 Vercel 项目时跳过自动部署。
+- 保留既有业务逻辑、Go 模块路径和第三方依赖，AGPL-3.0 许可证不变。
+
+以下版本为继承的上游历史记录，记录中的发布源代表当时的状态。
+
 ## [0.3.18] - 2026-10-12
 
 ### 审批审查
@@ -925,13 +935,22 @@
 - [@Autumn-27](https://github.com/Autumn-27)
 - [@neouks](https://github.com/neouks)
 
-[Unreleased]: https://github.com/Autumn-27/ARTEX/compare/v0.3.10...HEAD
-[0.3.10]: https://github.com/Autumn-27/ARTEX/compare/v0.3.9...v0.3.10
-[0.3.9]: https://github.com/Autumn-27/ARTEX/compare/v0.3.8...v0.3.9
-[0.3.8]: https://github.com/Autumn-27/ARTEX/compare/v0.3.7...v0.3.8
-[0.3.7]: https://github.com/Autumn-27/ARTEX/compare/v0.3.6...v0.3.7
-[0.3.6]: https://github.com/Autumn-27/ARTEX/compare/v0.3.5...v0.3.6
-[0.3.5]: https://github.com/Autumn-27/ARTEX/compare/v0.3.4...v0.3.5
-[0.3.4]: https://github.com/Autumn-27/ARTEX/compare/v0.3.3...v0.3.4
-[0.3.3]: https://github.com/Autumn-27/ARTEX/compare/v0.3.2...v0.3.3
-[0.3.2]: https://github.com/Autumn-27/ARTEX/compare/v0.3.1...v0.3.2
+<!-- 早期上游标签已不可获取，使用本仓库保留的定版提交定位历史记录。 -->
+[Unreleased]: https://github.com/fraternity-z/ARTEX/compare/9d8598c91b9701bf49370f69f357eded56cdbc11...main
+[0.3.18]: https://github.com/fraternity-z/ARTEX/tree/v0.3.18
+[0.3.17]: https://github.com/fraternity-z/ARTEX/tree/v0.3.17
+[0.3.16]: https://github.com/fraternity-z/ARTEX/tree/v0.3.16
+[0.3.15]: https://github.com/fraternity-z/ARTEX/tree/v0.3.15
+[0.3.14]: https://github.com/fraternity-z/ARTEX/blob/86162d7edac41afcdd82d8de9ecab512b7e014d6/CHANGELOG.md
+[0.3.13]: https://github.com/fraternity-z/ARTEX/blob/7b92395aa06301c4713f20a90824832e63c83a7a/CHANGELOG.md
+[0.3.12]: https://github.com/fraternity-z/ARTEX/blob/0ec51e37993aa50047317b009a05593c61bbdf1e/CHANGELOG.md
+[0.3.11]: https://github.com/fraternity-z/ARTEX/blob/8ee890771f042e5ee351e14bfcfde1a709dc915f/CHANGELOG.md
+[0.3.10]: https://github.com/fraternity-z/ARTEX/blob/90f31577f246031b792ff7f7b99718ac319a749c/CHANGELOG.md
+[0.3.9]: https://github.com/fraternity-z/ARTEX/blob/33d3d00c4b6da0d5e3b989ab532c4687d6e20552/CHANGELOG.md
+[0.3.8]: https://github.com/fraternity-z/ARTEX/blob/8dae851b9b622f2ff2631f332fde9719d0b16fba/CHANGELOG.md
+[0.3.7]: https://github.com/fraternity-z/ARTEX/blob/f66ac54fd6c6b0777faab217aa6083f83cfe29a8/CHANGELOG.md
+[0.3.6]: https://github.com/fraternity-z/ARTEX/blob/051ca84a20bbda634cbc40b32211e0a546852070/CHANGELOG.md
+[0.3.5]: https://github.com/fraternity-z/ARTEX/blob/48f260fdde5fc04e01443adbfd2ad9d355d84229/CHANGELOG.md
+[0.3.4]: https://github.com/fraternity-z/ARTEX/blob/6e40f41051568a084fce89cd8f5d37d0c01a8596/CHANGELOG.md
+[0.3.3]: https://github.com/fraternity-z/ARTEX/blob/9ab9fe23279ef60f46f89d72ab680ad1536fe886/CHANGELOG.md
+[0.3.2]: https://github.com/fraternity-z/ARTEX/blob/12de72354e213ca2666f3be815ef9c463a5bc82d/CHANGELOG.md

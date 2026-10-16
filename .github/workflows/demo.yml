@@ -32,7 +32,10 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event_name != 'release' || github.event.release.prerelease == false
+    if: >-
+      (github.event_name != 'release' || github.event.release.prerelease == false) &&
+      (github.event_name == 'workflow_dispatch' ||
+      (vars.VERCEL_ORG_ID != '' && vars.VERCEL_PROJECT_ID != '' && vars.DEMO_URL != ''))
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
