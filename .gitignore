@@ -26,8 +26,23 @@ web/public/demo-version.json
 *.swp
 *.swo
 
-# docs
-/docs/
+# docs（仅纳入公开手册和站点源文件）
+/docs/*
+!/docs/使用手册.md
+!/docs/日常使用.md
+!/docs/高级配置.md
+!/docs/部署维护与排错.md
+!/docs/漏洞流量证据.md
+!/docs/index.md
+!/docs/文档站维护.md
+!/docs/package.json
+!/docs/package-lock.json
+!/docs/.vitepress/
+!/docs/public/
+/docs/public/*
+!/docs/public/favicon.ico
+/docs/.vitepress/cache/
+/docs/.vitepress/dist/
 
 # os
 .DS_Store

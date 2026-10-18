@@ -5,13 +5,38 @@
 AI 自主渗透测试系统（Go 后端 + Next.js 前端）
 
 
-🌐 **项目主页**：[fraternity-z/ARTEX](https://github.com/fraternity-z/ARTEX) · [问题反馈](https://github.com/fraternity-z/ARTEX/issues) · [发布版本](https://github.com/fraternity-z/ARTEX/releases)
+🌐 **项目主页**：[fraternity-z/ARTEX](https://github.com/fraternity-z/ARTEX) · [使用文档](https://fraternity-z.github.io/ARTEX/) · [问题反馈](https://github.com/fraternity-z/ARTEX/issues) · [发布版本](https://github.com/fraternity-z/ARTEX/releases)
 
 </div>
 
 本仓库为独立维护的 [fraternity-z/ARTEX](https://github.com/fraternity-z/ARTEX)，源自 `RuoJi6/ARTEX`，继承 `Autumn-27/ARTEX` 的原始提交历史、贡献者署名与 AGPL-3.0 许可证。2026-10-17 起在此仓库维护项目文档、问题反馈与后续发布。程序发布包从本仓库 [Releases](https://github.com/fraternity-z/ARTEX/releases) 下载，Docker 镜像使用 `ghcr.io/fraternity-z/artex`，由本仓库 GitHub Actions 构建并发布。
 
 历史标签仅用于保留上游版本，不代表本仓库已发布对应程序包或镜像。首次独立版本发布前，请使用下方的源码编译方式；在线更新在尚无正式 Release 时会明确提示“尚未发布正式版本”。
+
+## 使用手册
+
+**第一次使用，请从 [使用手册与快速开始](docs/使用手册.md) 阅读。** 按步骤完成启动、首次登录、模型配置和一个离线练习，再学习日常操作与高级功能。
+
+| 内容 | 文档 |
+| --- | --- |
+| 安装方式选择、Docker 快速启动、首次设置、首个任务、页面导航 | [使用手册](docs/使用手册.md) |
+| 任务与模板、资产、对话、审批、发现归并、复测、流量证据、报告导出、计划与归档 | [日常使用](docs/日常使用.md) |
+| 配置优先级、模型与故障转移、重试与预算、代理、Agent、MCP、Skill、自定义工具、通知 | [高级配置](docs/高级配置.md) |
+| Windows / Linux / macOS 部署、源码构建、HTTPS、升级、备份恢复、密码维护和故障排查 | [部署维护与排错](docs/部署维护与排错.md) |
+
+Release 压缩包若未包含 `docs/`，可阅读 [在线文档站](https://fraternity-z.github.io/ARTEX/)。下文保留安装速查、维护者发布流程和技术架构。
+
+### 文档网站
+
+手册同时支持构建为独立文档站，包含分类导航、中文搜索、页内目录、代码复制、明暗主题和手机布局。
+
+```text
+cd docs
+npm ci
+npm run dev
+```
+
+打开终端显示的网址即可预览。正式构建使用 `npm run build`；仓库已配好独立的 `deploy-docs` 工作流，首次启用 Pages、设置域名与日常维护见 [文档站维护与发布](docs/文档站维护.md)。
 
 ---
 
@@ -53,8 +78,9 @@ AI 自主渗透测试系统（Go 后端 + Next.js 前端）
 ## 审批记录详情
 
 全局「审批记录」、任务内「拦截审批」及对话中的审批卡片均支持展开查看详情。展示结构参考
-[AegisHook 的审批详情组件](https://github.com/RuoJi6/AegisHook/blob/main/web/src/components/CallDetail.vue)，沿用 ARTEX 的组件和主题：
+[AegisHook 的审批详情组件](https://github.com/RuoJi6/AegisHook/blob/main/web/src/components/CallDetail.vue)，沿用 ARTEX 的组件和主题。
 
+展开后核对工具名称、输入参数、命中原因和上下文，再允许或拒绝。规则范围、优先级、模型兜底和超时处理见 [范围、拦截与审批](docs/高级配置.md#intercept)。
 
 ## 资产同步（ScopeSentry）
 
@@ -160,11 +186,14 @@ cp config.example.json config.json   # 填好 database 连接
 # 1) 前端静态导出
 cd web && npm ci && npm run build:static && cd ..
 # 2) 拷进内嵌目录
-cp -r web/out server/webui/dist
+mkdir -p server/webui/dist
+cp -R web/out/. server/webui/dist/
 # 3) 编译（-tags embedui 才内嵌前端）
 CGO_ENABLED=0 go build -tags embedui -o artex ./cmd/artex
 ./start.sh
 ```
+
+运行前先配置 PostgreSQL；Windows PowerShell 的环境变量写法不同，完整步骤见 [源码运行与编译](docs/部署维护与排错.md#source)。最终应存在 `server/webui/dist/index.html`，不能多嵌套一层 `out/`。
 
 ### 方式五：构建跨平台 Release 压缩包
 
@@ -186,7 +215,7 @@ ARTEX_TARGETS=linux/amd64,windows/amd64 ./build.sh --release
 
 ## 更新升级
 
-> 升级只换程序、不动数据：Postgres 数据卷 `pgdata`、`./data`（jwt.key / SQLite 等）、`./skills` 都会保留。**数据库迁移无需手动执行**——`artex` 每次启动会幂等重跑 `schema.sql`（含 `ADD COLUMN` / `CREATE INDEX IF NOT EXISTS`），即“重启即迁移”。升级前仍建议先备份 `./data` 与数据库。
+> 升级时应保留原 Postgres 数据卷 `pgdata`、`./data`（工作文件、流量、证据与归档等）及 `./skills`。**数据库迁移无需手动执行**——`artex` 每次启动会幂等重跑 `schema.sql`（含 `ADD COLUMN` / `CREATE INDEX IF NOT EXISTS`）。当前 `jwt.key` 位于可执行文件旁，Docker 中为 `/app/jwt.key`，不在默认的 `data/` 挂载内；重建容器可能需要重新登录。升级前按 [备份与恢复](docs/部署维护与排错.md#backup) 备份数据库、文件、配置与签名密钥。
 
 ### 方式一：页面一键更新（推荐）
 
@@ -279,10 +308,9 @@ docker image prune -f          # 清理旧镜像（可选）
 
 ### 方式四：预编译二进制（Releases）
 
-到 [Releases](https://github.com/fraternity-z/ARTEX/releases) 下载新版本 zip，停掉旧进程后覆盖 `artex` 与 `skills/`（保留你的 `config.json` 与 `data/`），重启即可：
+到 [Releases](https://github.com/fraternity-z/ARTEX/releases) 下载并校验新版本 zip，停掉旧进程，备份旧程序后替换 `artex`（Windows 为 `artex.exe`）及需要更新的启动脚本。保留 `config.json`、`data/` 和 `jwt.key`；自定义 `skills/` 先备份，再与新版本逐项合并，避免整目录覆盖。完成后使用启动脚本启动：
 
 ```bash
-cp -r <解压目录>/skills ./ && cp <解压目录>/artex ./
 ./start.sh
 ```
 
@@ -291,7 +319,8 @@ cp -r <解压目录>/skills ./ && cp <解压目录>/artex ./
 ```bash
 git pull
 cd web && npm ci && npm run build:static && cd ..
-cp -r web/out server/webui/dist
+mkdir -p server/webui/dist
+cp -R web/out/. server/webui/dist/
 CGO_ENABLED=0 go build -tags embedui -o artex ./cmd/artex
 # 重启 ./start.sh
 ```
@@ -396,13 +425,13 @@ server {
 ### 本地运行与测试
 
 ```bash
-./dev.sh    # 后端(:8787) + 流量代理(:8788) + 前端 next dev(:5173) → http://localhost:5173
+./dev.sh    # 同时启动后端、流量代理和前端；前端端口以 Next 终端输出为准
 ```
 
 - 后端：`go run ./cmd/artex`（不带 `-tags embedui` 则不内嵌前端）
-- 前端：`cd web && npm run dev`（`/api` 反代到后端，带热更新）
-- 测试：`go test ./...`
-- Mock 预览（无后端）：`cd web && NEXT_PUBLIC_MOCK=1 npm run dev`
+- 前端：`cd web && npm run dev -- --port 5173`（明确使用 5173，`/api` 反代到后端，带热更新）
+- 测试：`go test ./...`，集成测试必须指向独立、可丢弃的测试数据库，不要连接日常使用的数据。
+- Mock 预览（无后端）：`cd web && NEXT_PUBLIC_MOCK=1 npm run dev -- --port 5173`（Bash 写法；[PowerShell 步骤](docs/使用手册.md#21-只体验界面)）
 
 ---
 
