@@ -31,30 +31,34 @@ type IntelligenceInput struct {
 
 type Intelligence struct {
 	IntelligenceInput
-	ID            int64     `json:"id"`
-	TaskID        int64     `json:"task_id"`
-	NodeID        *int64    `json:"node_id,omitempty"`
-	Worker        string    `json:"worker"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
-	Inherited     bool      `json:"inherited"`
-	SourceSession string    `json:"source_session,omitempty"`
+	ID            int64               `json:"id"`
+	TaskID        int64               `json:"task_id"`
+	NodeID        *int64              `json:"node_id,omitempty"`
+	Worker        string              `json:"worker"`
+	CreatedAt     time.Time           `json:"created_at"`
+	UpdatedAt     time.Time           `json:"updated_at"`
+	Inherited     bool                `json:"inherited"`
+	SourceSession string              `json:"source_session,omitempty"`
+	Credentials   *CredentialAnalysis `json:"credentials,omitempty"`
 }
 
 type IntelligenceFilter struct {
-	TaskID int64
-	Kind   string
-	Status string
-	Query  string
-	Limit  int
-	Offset int
+	TaskID  int64
+	AssetID int64
+	Kind    string
+	Status  string
+	Query   string
+	Limit   int
+	Offset  int
 }
 
 type IntelligencePage struct {
-	Items   []*Intelligence `json:"items"`
-	Total   int             `json:"total"`
-	Counts  map[string]int  `json:"counts"`
-	Enabled bool            `json:"enabled"`
+	Items                    []*Intelligence `json:"items"`
+	Total                    int             `json:"total"`
+	Counts                   map[string]int  `json:"counts"`
+	Enabled                  bool            `json:"enabled"`
+	CredentialAgentEnabled   bool            `json:"credential_agent_enabled"`
+	CredentialTrafficBinding bool            `json:"credential_traffic_binding"`
 }
 
 func ValidIntelligenceStatus(kind, status string) bool {
@@ -138,8 +142,8 @@ func intelligenceFingerprint(in IntelligenceInput) string {
 	return hex.EncodeToString(sum[:])
 }
 
-const intelligenceCols = `id,task_id,node_id,kind,title,content,evidence,confidence,status,asset_ids,worker,created_at,updated_at`
-const intelligenceSelectCols = `i.id,i.task_id,i.node_id,i.kind,i.title,i.content,i.evidence,i.confidence,i.status,i.asset_ids,i.worker,i.created_at,i.updated_at`
+const intelligenceCols = `id,task_id,node_id,kind,title,content,evidence,confidence,status,asset_ids,worker,created_at,updated_at,credential_analysis`
+const intelligenceSelectCols = `i.id,i.task_id,i.node_id,i.kind,i.title,i.content,i.evidence,i.confidence,i.status,i.asset_ids,i.worker,i.created_at,i.updated_at,i.credential_analysis`
 
 // Resolve provenance from the graph; a display worker number is not a session ID.
 const intelligenceSourceSession = `, COALESCE(
@@ -150,8 +154,8 @@ const intelligenceSourceSession = `, COALESCE(
 
 func scanIntelligence(row interface{ Scan(...any) error }, withSource bool) (*Intelligence, error) {
 	item := &Intelligence{}
-	var assets []byte
-	dest := []any{&item.ID, &item.TaskID, &item.NodeID, &item.Kind, &item.Title, &item.Content, &item.Evidence, &item.Confidence, &item.Status, &assets, &item.Worker, &item.CreatedAt, &item.UpdatedAt}
+	var assets, credentials []byte
+	dest := []any{&item.ID, &item.TaskID, &item.NodeID, &item.Kind, &item.Title, &item.Content, &item.Evidence, &item.Confidence, &item.Status, &assets, &item.Worker, &item.CreatedAt, &item.UpdatedAt, &credentials}
 	if withSource {
 		dest = append(dest, &item.SourceSession)
 	}
@@ -160,6 +164,11 @@ func scanIntelligence(row interface{ Scan(...any) error }, withSource bool) (*In
 	}
 	if err := json.Unmarshal(assets, &item.AssetIDs); err != nil {
 		return nil, err
+	}
+	if len(credentials) > 0 {
+		if err := json.Unmarshal(credentials, &item.Credentials); err != nil {
+			return nil, err
+		}
 	}
 	return item, nil
 }
@@ -229,7 +238,7 @@ const intelligenceScope = ` FROM task_intelligence i JOIN tasks t ON t.id=i.task
  AND (i.task_id=$1 OR EXISTS(SELECT 1 FROM task_relations r WHERE r.task_id=$1 AND r.source_task_id=i.task_id))`
 
 func (d *DB) ListIntelligence(ctx context.Context, f IntelligenceFilter) (*IntelligencePage, error) {
-	if f.TaskID <= 0 || len(f.Query) > 500 {
+	if (f.TaskID <= 0 && f.AssetID <= 0) || (f.TaskID > 0 && f.AssetID > 0) || len(f.Query) > 500 {
 		return nil, fmt.Errorf("%w: 任务 ID 无效或搜索关键词过长", ErrIntelligenceInvalid)
 	}
 	if f.Limit <= 0 || f.Limit > 100 {
@@ -239,7 +248,14 @@ func (d *DB) ListIntelligence(ctx context.Context, f IntelligenceFilter) (*Intel
 		f.Offset = 0
 	}
 	page := &IntelligencePage{Items: []*Intelligence{}, Counts: map[string]int{"credential": 0, "lead": 0, "sensitive_data": 0}, Enabled: d.GetBool(SettingTaskIntelligence, false)}
-	rows, err := d.QueryContext(ctx, `SELECT kind,count(*)`+intelligenceScope+` GROUP BY kind`, f.TaskID)
+	page.CredentialAgentEnabled = d.GetBool(SettingCredentialAgent, false)
+	page.CredentialTrafficBinding = d.GetBool(SettingCredentialTraffic, false)
+	scope, scopeID := intelligenceScope, f.TaskID
+	if f.AssetID > 0 {
+		scope = ` FROM task_intelligence i JOIN tasks t ON t.id=i.task_id AND t.deleted_at IS NULL AND t.archived_at IS NULL WHERE i.asset_ids @> jsonb_build_array($1::bigint)`
+		scopeID = f.AssetID
+	}
+	rows, err := d.QueryContext(ctx, `SELECT kind,count(*)`+scope+` GROUP BY kind`, scopeID)
 	if err != nil {
 		return nil, err
 	}
@@ -257,8 +273,8 @@ func (d *DB) ListIntelligence(ctx context.Context, f IntelligenceFilter) (*Intel
 	if err != nil {
 		return nil, err
 	}
-	where := intelligenceScope + ` AND ($2='' OR i.kind=$2) AND ($3='' OR i.status=$3) AND ($4='' OR i.title ILIKE '%'||$4||'%' OR i.worker ILIKE '%'||$4||'%')`
-	args := []any{f.TaskID, f.Kind, f.Status, f.Query}
+	where := scope + ` AND ($2='' OR i.kind=$2) AND ($3='' OR i.status=$3) AND ($4='' OR i.title ILIKE '%'||$4||'%' OR i.worker ILIKE '%'||$4||'%')`
+	args := []any{scopeID, f.Kind, f.Status, f.Query}
 	if err = d.QueryRowContext(ctx, `SELECT count(*)`+where, args...).Scan(&page.Total); err != nil {
 		return nil, err
 	}
@@ -273,7 +289,7 @@ func (d *DB) ListIntelligence(ctx context.Context, f IntelligenceFilter) (*Intel
 		if err != nil {
 			return nil, err
 		}
-		item.Inherited = item.TaskID != f.TaskID
+		item.Inherited = f.TaskID > 0 && item.TaskID != f.TaskID
 		page.Items = append(page.Items, item)
 	}
 	return page, rows.Err()

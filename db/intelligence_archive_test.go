@@ -1,8 +1,10 @@
 package db
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 )
 
@@ -13,6 +15,9 @@ func TestIntelligenceArchiveRoundTrip(t *testing.T) {
 	}
 	defer d.Close()
 	if err := d.EnsureLLMRecordsTable(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.EnsureLLMUsageTable(); err != nil {
 		t.Fatal(err)
 	}
 	task, err := d.CreateTask("intelligence archive", "fixture", nil, 0, 0)
@@ -52,6 +57,14 @@ func TestIntelligenceArchiveRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := d.UpdateIntelligenceStatus(t.Context(), task.ID, item.ID, "verified"); err != nil {
+		t.Fatal(err)
+	}
+	analysis := CredentialAnalysis{State: "ready", Method: "rules", Accounts: []CredentialAccount{{Username: "qa@fixture.invalid", Password: "fixture.invalid"}}, TrafficState: "ready", Traffic: []CredentialTraffic{{ID: "fixture.invalid", URL: "https://fixture.invalid/login", Method: "POST", Status: 200, Side: "request", Excerpt: "fixture.invalid account excerpt", Accounts: []int{0}}}}
+	rawAnalysis, err := json.Marshal(analysis)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec(`UPDATE task_intelligence SET credential_analysis=$2::jsonb WHERE id=$1`, item.ID, string(rawAnalysis)); err != nil {
 		t.Fatal(err)
 	}
 	in.AssetIDs = []int64{sharedAsset}
@@ -114,6 +127,9 @@ func TestIntelligenceArchiveRoundTrip(t *testing.T) {
 	if err != nil || got.Status != "verified" || got.Content != item.Content || got.Evidence != item.Evidence || got.NodeID == nil || *got.NodeID != intent || len(got.AssetIDs) != 2 {
 		t.Fatalf("intelligence restore lost provenance/content/triage: %+v %v", got, err)
 	}
+	if !reflect.DeepEqual(got.Credentials, &analysis) {
+		t.Fatal("archive lost credential accounts or traffic excerpt")
+	}
 	if err := d.CompleteTaskArchiveRestore(archive.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -121,6 +137,55 @@ func TestIntelligenceArchiveRoundTrip(t *testing.T) {
 	newItem, err := d.RecordIntelligence(t.Context(), task.ID, intent, "qa", in)
 	if err != nil || newItem.ID <= item.ID {
 		t.Fatalf("restored sequence collision: %+v %v", newItem, err)
+	}
+}
+
+func TestIntelligenceArchiveRowsWithoutCredentialAnalysis(t *testing.T) {
+	d, err := Open(testDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	task, err := d.CreateTask("legacy credential fixture.invalid", "fixture.invalid", nil, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.DeleteTask(task.ID)
+	item, err := d.RecordIntelligence(t.Context(), task.ID, 0, "qa", testIntelligenceInput())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := d.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	var raw []byte
+	if err := tx.QueryRow(`SELECT json_agg(t) FROM task_intelligence t WHERE id=$1`, item.ID).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	var rows []map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		t.Fatal(err)
+	}
+	delete(rows[0], "credential_analysis")
+	raw, err = json.Marshal(rows)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`DELETE FROM task_intelligence WHERE id=$1`, item.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := insertArchiveRows(tx, "task_intelligence", raw); err != nil {
+		t.Fatal(err)
+	}
+	var missing bool
+	var content string
+	if err := tx.QueryRow(`SELECT credential_analysis IS NULL,content FROM task_intelligence WHERE id=$1`, item.ID).Scan(&missing, &content); err != nil {
+		t.Fatal(err)
+	}
+	if !missing || content != item.Content {
+		t.Fatal("legacy archive fabricated analysis or lost content")
 	}
 }
 

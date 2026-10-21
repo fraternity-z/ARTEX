@@ -1564,3 +1564,5 @@ CREATE TABLE IF NOT EXISTS task_intelligence (
 );
 CREATE INDEX IF NOT EXISTS idx_task_intelligence_task ON task_intelligence(task_id,id DESC);
 CREATE INDEX IF NOT EXISTS idx_task_intelligence_assets ON task_intelligence USING gin(asset_ids);
+-- Nullable for archives created before credential processing was introduced.
+ALTER TABLE task_intelligence ADD COLUMN IF NOT EXISTS credential_analysis JSONB;

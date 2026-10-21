@@ -7,6 +7,7 @@ import Link from "next/link";
 import { CopyIcon, RefreshCwIcon } from "lucide-react";
 import { toast } from "sonner";
 
+import { CredentialContent, CredentialTrafficViewer } from "@/components/credential-content";
 import { ToneDot } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +23,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   type IntelligenceKind,
   type IntelligencePage,
+  type IntelligenceScope,
   intelligenceApi,
   type TaskIntelligence,
 } from "@/lib/intelligence";
@@ -80,7 +82,33 @@ function AssetLinks({ ids, onNavigate }: { ids: number[]; onNavigate: () => void
   );
 }
 
-export function IntelligencePanel({ taskId }: { taskId: string }) {
+type IntelligencePanelProps = { onNavigate?: () => void } & (
+  | { taskId: string; scope?: never; scopeId?: never }
+  | { taskId?: never; scope: IntelligenceScope; scopeId: string }
+);
+
+export function IntelligencePanel(props: IntelligencePanelProps) {
+  const scope = props.scope ?? "tasks";
+  const scopeId = props.scopeId ?? props.taskId;
+  return (
+    <IntelligencePanelContent
+      key={`${scope}:${scopeId}`}
+      scope={scope}
+      scopeId={scopeId}
+      onNavigate={props.onNavigate}
+    />
+  );
+}
+
+function IntelligencePanelContent({
+  scope,
+  scopeId,
+  onNavigate,
+}: {
+  scope: IntelligenceScope;
+  scopeId: string;
+  onNavigate?: () => void;
+}) {
   const [kind, setKind] = React.useState<IntelligenceKind | "all">("all");
   const [status, setStatus] = React.useState("all");
   const [search, setSearch] = React.useState("");
@@ -91,6 +119,8 @@ export function IntelligencePanel({ taskId }: { taskId: string }) {
   const [refreshVersion, setRefreshVersion] = React.useState(0);
   const [selected, setSelected] = React.useState<TaskIntelligence | null>(null);
   const [saving, setSaving] = React.useState(false);
+  const [retrying, setRetrying] = React.useState(false);
+  const [trafficTarget, setTrafficTarget] = React.useState<{ item: TaskIntelligence; id: string } | null>(null);
 
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -112,7 +142,7 @@ export function IntelligencePanel({ taskId }: { taskId: string }) {
         if (kind !== "all") params.set("kind", kind);
         if (status !== "all") params.set("status", status);
         if (query) params.set("q", query);
-        const result = await intelligenceApi.list(taskId, params, controller.signal);
+        const result = await intelligenceApi.list(scope, scopeId, params, controller.signal);
         if (!alive) return;
         const lastPage = Math.max(0, Math.ceil(result.total / PAGE_SIZE) - 1);
         if (page > lastPage) {
@@ -138,11 +168,15 @@ export function IntelligencePanel({ taskId }: { taskId: string }) {
       controller.abort();
       clearInterval(timer);
     };
-  }, [taskId, kind, status, query, page, refreshVersion]);
+  }, [scope, scopeId, kind, status, query, page, refreshVersion]);
 
   const close = () => setSelected(null);
+  const navigate = () => {
+    close();
+    onNavigate?.();
+  };
   const update = async (value: string) => {
-    if (!selected || selected.inherited || saving || value === selected.status) return;
+    if (scope !== "tasks" || !selected || selected.inherited || saving || value === selected.status) return;
     const target = selected;
     setSaving(true);
     try {
@@ -156,6 +190,20 @@ export function IntelligencePanel({ taskId }: { taskId: string }) {
       setSaving(false);
     }
   };
+  const retry = async () => {
+    if (scope !== "tasks" || !selected || selected.inherited || retrying) return;
+    const target = selected;
+    setRetrying(true);
+    try {
+      await intelligenceApi.retryCredentials(target.task_id, target.id);
+      setRefreshVersion((version) => version + 1);
+      toast.success("已加入凭据处理队列");
+    } catch (reason) {
+      toast.error(`重新处理失败：${(reason as Error).message}`);
+    } finally {
+      setRetrying(false);
+    }
+  };
   const statusOptions =
     kind === "all"
       ? Object.fromEntries(Object.values(STATUS).flatMap((options) => Object.entries(options)))
@@ -166,7 +214,7 @@ export function IntelligencePanel({ taskId }: { taskId: string }) {
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      {data && !data.enabled ? (
+      {data && !data.enabled && scope === "tasks" ? (
         <Alert>
           <AlertTitle>自动记录已关闭</AlertTitle>
           <AlertDescription>
@@ -180,9 +228,10 @@ export function IntelligencePanel({ taskId }: { taskId: string }) {
       ) : null}
       <Card className="min-w-0">
         <CardHeader>
-          <CardTitle>任务情报</CardTitle>
+          <CardTitle>{scope === "tasks" ? "任务情报" : "资产关联情报"}</CardTitle>
           <CardDescription>
-            集中查看本次获取与直接关联任务继承的情报。直接展示凭据、敏感数据及来源证据，发现凭据不代表验证成功。
+            {scope === "tasks" ? "集中查看本次获取与直接关联任务继承的情报。" : "按来源任务查看此资产关联的情报。"}
+            直接展示凭据、敏感数据及来源证据，发现凭据不代表验证成功。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex min-w-0 flex-col gap-4">
@@ -283,7 +332,12 @@ export function IntelligencePanel({ taskId }: { taskId: string }) {
                     </TableCell>
                     <TableCell className="whitespace-normal align-top">
                       <div className="flex min-w-0 flex-col gap-2">
-                        <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{preview(item.content, 500)}</p>
+                        <CredentialContent
+                          item={item}
+                          enabled={data.credential_agent_enabled}
+                          onDetails={() => setSelected(item)}
+                          onTraffic={(id) => setTrafficTarget({ item, id })}
+                        />
                         <div className="flex flex-col gap-1 text-muted-foreground text-xs">
                           <span>来源证据</span>
                           <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{preview(item.evidence, 220)}</p>
@@ -300,7 +354,7 @@ export function IntelligencePanel({ taskId }: { taskId: string }) {
                     </TableCell>
                     <TableCell className="whitespace-normal align-top [overflow-wrap:anywhere]">
                       <div className="flex flex-col gap-1">
-                        <Link href={conversationHref(item)} onClick={close} className="underline">
+                        <Link href={conversationHref(item)} onClick={navigate} className="underline">
                           任务 #{item.task_id}
                         </Link>
                         <span className="text-muted-foreground text-xs">
@@ -311,7 +365,7 @@ export function IntelligencePanel({ taskId }: { taskId: string }) {
                       </div>
                     </TableCell>
                     <TableCell className="whitespace-normal align-top [overflow-wrap:anywhere]">
-                      <AssetLinks ids={item.asset_ids} onNavigate={close} />
+                      <AssetLinks ids={item.asset_ids} onNavigate={navigate} />
                     </TableCell>
                     <TableCell className="whitespace-normal align-top text-xs">{time(item.created_at)}</TableCell>
                     <TableCell className="whitespace-normal align-top">
@@ -361,7 +415,7 @@ export function IntelligencePanel({ taskId }: { taskId: string }) {
           if (!open) close();
         }}
       >
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="pr-6 [overflow-wrap:anywhere]">{selected?.title ?? "情报详情"}</DialogTitle>
             <DialogDescription>完整展示记录内容与实际来源证据。</DialogDescription>
@@ -376,7 +430,7 @@ export function IntelligencePanel({ taskId }: { taskId: string }) {
                   {selected.node_id ? ` · 来源节点 #${selected.node_id}` : ""} · {selected.worker || "Agent"}
                 </span>
               </div>
-              {!selected.inherited ? (
+              {scope === "tasks" && !selected.inherited ? (
                 <Select value={selected.status} disabled={saving} onValueChange={(value) => void update(value)}>
                   <SelectTrigger aria-label="更新情报状态">
                     <SelectValue />
@@ -393,7 +447,8 @@ export function IntelligencePanel({ taskId }: { taskId: string }) {
                 </Select>
               ) : (
                 <p className="text-muted-foreground text-sm">
-                  {STATUS[selected.kind][selected.status]} · 继承记录只读，请到来源任务修改状态
+                  {STATUS[selected.kind][selected.status]} · {selected.inherited ? "继承记录只读，" : ""}
+                  请到来源任务修改状态
                 </p>
               )}
               <div className="flex items-center justify-between gap-2">
@@ -412,9 +467,28 @@ export function IntelligencePanel({ taskId }: { taskId: string }) {
                   复制
                 </Button>
               </div>
-              <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-muted p-3 text-xs">
-                {selected.content}
-              </pre>
+              <CredentialContent
+                key={selected.id}
+                item={selected}
+                detail
+                enabled={data?.credential_agent_enabled}
+                onTraffic={(id) => setTrafficTarget({ item: selected, id })}
+              />
+              {scope === "tasks" &&
+              selected.kind === "credential" &&
+              !selected.inherited &&
+              data?.credential_agent_enabled ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={
+                    retrying || selected.credentials?.state === "queued" || selected.credentials?.state === "processing"
+                  }
+                  onClick={() => void retry()}
+                >
+                  重新处理凭据
+                </Button>
+              ) : null}
               <p className="text-sm">来源证据</p>
               <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-muted p-3 text-xs">
                 {selected.evidence}
@@ -422,18 +496,25 @@ export function IntelligencePanel({ taskId }: { taskId: string }) {
               <div className="flex flex-wrap gap-2 text-muted-foreground text-xs">
                 <span>
                   关联资产：
-                  <AssetLinks ids={selected.asset_ids} onNavigate={close} />
+                  <AssetLinks ids={selected.asset_ids} onNavigate={navigate} />
                 </span>
                 <span>发现于 {time(selected.created_at)}</span>
                 <span>更新于 {time(selected.updated_at)}</span>
               </div>
-              <Link href={conversationHref(selected)} onClick={close} className="text-sm underline">
+              <Link href={conversationHref(selected)} onClick={navigate} className="text-sm underline">
                 {selected.source_session ? "查看来源任务会话" : "查看来源任务"}
               </Link>
             </div>
           ) : null}
         </DialogContent>
       </Dialog>
+      <CredentialTrafficViewer
+        scope={scope}
+        scopeId={scopeId}
+        item={trafficTarget?.item ?? null}
+        trafficId={trafficTarget?.id ?? null}
+        onClose={() => setTrafficTarget(null)}
+      />
     </div>
   );
 }

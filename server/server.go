@@ -238,6 +238,8 @@ func New(ctx context.Context, m *Manager, skillDir string, dataDir string, keyDi
 			log.Printf("[retester] seed: %v", err)
 		}
 		go s.evidenceStore().RunGC(s.ctx)
+		s.seedCredentialProcessor()
+		go s.runCredentialProcessor()
 		s.seedPythonInterpreter() // 自定义脚本工具:开机检测 python 解释器入库(仅空时)
 		// Calendar scheduler starts after persisted tasks are restored.
 		// 漏洞 IM 推送投递引擎。与 Scheduler 并列但独立：推送的实时性要求(3s)
@@ -754,6 +756,20 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/tasks/{id}/intent-assets", s.taskIntentAssets)
 	mux.HandleFunc("GET /api/tasks/{id}/intelligence", s.listIntelligence)
 	mux.HandleFunc("GET /api/tasks/{id}/intelligence/{intelID}", s.getIntelligence)
+	mux.HandleFunc("GET /api/assets/{id}/intelligence", func(w http.ResponseWriter, r *http.Request) {
+		r.SetPathValue("scope", "assets")
+		s.listIntelligence(w, r)
+	})
+	mux.HandleFunc("GET /api/assets/{id}/intelligence/{intelID}", func(w http.ResponseWriter, r *http.Request) {
+		r.SetPathValue("scope", "assets")
+		s.getIntelligence(w, r)
+	})
+	mux.HandleFunc("POST /api/tasks/{id}/intelligence/{intelID}/credentials/retry", s.retryCredentials)
+	mux.HandleFunc("GET /api/tasks/{id}/intelligence/{intelID}/traffic/{trafficID}", s.credentialTrafficDetail)
+	mux.HandleFunc("GET /api/assets/{id}/intelligence/{intelID}/traffic/{trafficID}", func(w http.ResponseWriter, r *http.Request) {
+		r.SetPathValue("scope", "assets")
+		s.credentialTrafficDetail(w, r)
+	})
 	mux.HandleFunc("PATCH /api/tasks/{id}/intelligence/{intelID}", s.updateIntelligence)
 
 	// 工作空间文件管理器（针对 workDir）
@@ -3420,7 +3436,9 @@ func (s *Server) settingsPayload() map[string]any {
 		// 接管上下文压缩,取代内置 compaction;每 run 读一次,对之后启动的 run 生效。
 		"noa_compaction": s.m.NoaCompactionEnabled(),
 		// 自动记录任务情报；关闭后保留已有记录。
-		"task_intelligence_enabled": s.m.pg.GetBool(db.SettingTaskIntelligence, false),
+		"task_intelligence_enabled":  s.m.pg.GetBool(db.SettingTaskIntelligence, false),
+		"credential_agent_enabled":   s.m.pg.GetBool(db.SettingCredentialAgent, false),
+		"credential_traffic_binding": s.m.pg.GetBool(db.SettingCredentialTraffic, false),
 		// 漏洞 IM 推送的全局项。渠道本身是独立资源，走 /api/notify/* 管理；
 		// 这里只放「作用于全部渠道」的三项。
 		"notify_enabled":             s.m.pg.GetBool(settingNotifyEnabled, true),
@@ -3471,6 +3489,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		TrafficCapture      *bool `json:"traffic_capture"`
 		AgentTrafficBinding *bool `json:"agent_traffic_binding"`
 		TaskIntelligence    *bool `json:"task_intelligence_enabled"`
+		CredentialAgent     *bool `json:"credential_agent_enabled"`
+		CredentialTraffic   *bool `json:"credential_traffic_binding"`
 		LLMRecord           *bool `json:"llm_record"` // LLM 录制开关（默认关）；即时生效，无需重建 agent
 		// Web search. WebSearchEnabled/Backend toggle the tool + backend; BraveKey/TavilyKey
 		// are optional — omit (null) to leave a stored key untouched, send "" to clear.
@@ -3619,9 +3639,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if req.TaskIntelligence != nil {
-		if err := s.m.pg.SetBool(db.SettingTaskIntelligence, *req.TaskIntelligence); err != nil {
-			writeErr(w, 500, "任务情报设置保存失败")
+	if req.TaskIntelligence != nil || req.CredentialAgent != nil || req.CredentialTraffic != nil {
+		if err := s.m.pg.SetIntelligenceSettings(r.Context(), req.TaskIntelligence, req.CredentialAgent, req.CredentialTraffic); err != nil {
+			intelligenceError(w, err)
 			return
 		}
 	}

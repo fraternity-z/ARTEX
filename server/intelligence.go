@@ -28,9 +28,21 @@ func (s *Server) intelligenceFilter(w http.ResponseWriter, r *http.Request) (db.
 		writeErr(w, http.StatusBadRequest, "无效任务 ID")
 		return f, false
 	}
-	f.TaskID = id
+	if r.PathValue("scope") == "assets" {
+		f.AssetID = id
+	} else if scope := r.PathValue("scope"); scope == "" || scope == "tasks" {
+		f.TaskID = id
+	} else {
+		writeErr(w, http.StatusBadRequest, "无效情报范围")
+		return f, false
+	}
 	var exists bool
-	err := s.m.pg.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM tasks WHERE id=$1 AND deleted_at IS NULL AND archived_at IS NULL)`, id).Scan(&exists)
+	var err error
+	if f.TaskID > 0 {
+		err = s.m.pg.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM tasks WHERE id=$1 AND deleted_at IS NULL AND archived_at IS NULL)`, id).Scan(&exists)
+	} else {
+		err = s.m.pg.QueryRowContext(r.Context(), "SELECT EXISTS(SELECT 1 FROM assets WHERE id=$1)", id).Scan(&exists)
+	}
 	if err != nil {
 		intelligenceError(w, err)
 		return f, false
@@ -83,7 +95,16 @@ func (s *Server) getIntelligence(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var allowed bool
-	err = s.m.pg.QueryRowContext(r.Context(), `SELECT $1::bigint=$2::bigint OR EXISTS(SELECT 1 FROM task_relations WHERE task_id=$1 AND source_task_id=$2)`, f.TaskID, item.TaskID).Scan(&allowed)
+	if f.TaskID > 0 {
+		err = s.m.pg.QueryRowContext(r.Context(), `SELECT $1::bigint=$2::bigint OR EXISTS(SELECT 1 FROM task_relations WHERE task_id=$1 AND source_task_id=$2)`, f.TaskID, item.TaskID).Scan(&allowed)
+	} else {
+		for _, assetID := range item.AssetIDs {
+			if assetID == f.AssetID {
+				allowed = true
+				break
+			}
+		}
+	}
 	if err != nil {
 		intelligenceError(w, err)
 		return
@@ -92,7 +113,7 @@ func (s *Server) getIntelligence(w http.ResponseWriter, r *http.Request) {
 		intelligenceError(w, db.ErrIntelligenceNotFound)
 		return
 	}
-	item.Inherited = item.TaskID != f.TaskID
+	item.Inherited = f.TaskID > 0 && item.TaskID != f.TaskID
 	writeJSON(w, http.StatusOK, item)
 }
 
