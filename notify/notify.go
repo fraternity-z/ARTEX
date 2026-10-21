@@ -13,12 +13,13 @@ package notify
 // 渠道类型标识。取值同时是 notification_channels.kind 的合法集合，由 server 侧
 // 白名单校验（与 findings.status 同理，不用 DB CHECK，方便后续加渠道）。
 const (
-	KindDingTalk = "dingtalk" // 钉钉自定义机器人
-	KindFeishu   = "feishu"   // 飞书(含 Lark)自定义机器人
-	KindWeCom    = "wecom"    // 企业微信群机器人
-	KindWebhook  = "webhook"  // 通用 Webhook：自定义方法/头/JSON 模板
-	KindTelegram = "telegram" // Telegram Bot API
-	KindEmail    = "email"    // SMTP 邮件
+	KindDingTalk   = "dingtalk"    // 钉钉自定义机器人
+	KindFeishu     = "feishu"      // 飞书(含 Lark)自定义机器人
+	KindWeCom      = "wecom"       // 企业微信群机器人
+	KindWechatClaw = "wechat_claw" // 微信 ClawBot（iLink）
+	KindWebhook    = "webhook"     // 通用 Webhook：自定义方法/头/JSON 模板
+	KindTelegram   = "telegram"    // Telegram Bot API
+	KindEmail      = "email"       // SMTP 邮件
 )
 
 // 事件类型，对应 notification_events.kind。

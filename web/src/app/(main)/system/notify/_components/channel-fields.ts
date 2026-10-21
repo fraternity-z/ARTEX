@@ -8,6 +8,7 @@ export const KIND_LABEL: Record<string, string> = {
   dingtalk: "钉钉",
   feishu: "飞书",
   wecom: "企业微信",
+  wechat_claw: "微信 Claw",
   webhook: "通用 Webhook",
   telegram: "Telegram",
   email: "邮件",
@@ -85,6 +86,13 @@ export const CHANNEL_FIELDS: Record<string, FieldDef[]> = {
         "以及 range .Items 下的 .Name/.VulnClass/.Severity/.Summary/.Assets/.DetailURL/.StatusLabel。" +
         "插入字符串请用 {{json .Xxx}} 而不是 {{.Xxx}}，否则标题里的引号会破坏 JSON。",
     },
+  ],
+  wechat_claw: [
+    { key: "base_url", label: "服务地址", kind: "text" },
+    { key: "bot_token", label: "登录令牌", kind: "password" },
+    { key: "context_token", label: "会话令牌", kind: "password" },
+    { key: "get_updates_buf", label: "同步游标", kind: "password" },
+    { key: "chat_id", label: "iLink 用户 ID", kind: "text" },
   ],
   telegram: [
     { key: "bot_token", label: "Bot Token", kind: "password", placeholder: "123456:ABC-DEF..." },

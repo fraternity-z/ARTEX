@@ -395,7 +395,7 @@ func (s *Server) notifyDeleteChannel(w http.ResponseWriter, r *http.Request) {
 //
 // 直接调用渠道 Send 而不经投递队列：测试的目的是立刻告诉用户「这套配置能不能
 // 发出去」，走队列会把结果藏进投递历史，用户得再去翻一遍才知道成没成。
-// 因此本接口是**同步**的，超时上限由 notify 包的 HTTP 客户端决定（15 秒）。
+// 因此本接口是**同步**的，超时上限由渠道决定（HTTP 通常 15 秒，微信 Claw 含恢复最多 30 秒）。
 func (s *Server) notifyTestChannel(w http.ResponseWriter, r *http.Request) {
 	pg := s.pg(w)
 	if pg == nil {

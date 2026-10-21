@@ -107,6 +107,7 @@ import type {
   TrafficResp,
   UpdateCheck,
   UsageStats,
+  WechatClawLoginResult,
   WorkspaceFile,
   WorkspaceListing,
 } from "@/lib/types";
@@ -927,6 +928,10 @@ export const api = {
   // 渠道是多实例资源（同一类型可配多个机器人、各有过滤规则），因此独立成组，
   // 不塞进扁平的 settings 键值里。
   notifyMeta: () => get<NotificationMeta>(`/notify/meta`),
+  notifyWechatClawStart: (signal: AbortSignal) =>
+    http<{ login_id: string; qr_content: string }>("/notify/wechat-claw/login", { method: "POST", signal }),
+  notifyWechatClawPoll: (id: string, signal: AbortSignal) =>
+    http<WechatClawLoginResult>(`/notify/wechat-claw/login/${encodeURIComponent(id)}`, { method: "POST", signal }),
   notifyChannels: () => get<{ channels: NotificationChannel[] }>(`/notify/channels`).then((r) => arr(r.channels)),
   notifyCreateChannel: (payload: {
     name: string;

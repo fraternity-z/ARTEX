@@ -46,12 +46,13 @@ type Channel interface {
 // registry 是渠道注册表。刻意用显式字面量而不是 init() 自注册：这样「有哪些渠道」
 // 在一个地方就能看全，且新增渠道会在编译期暴露遗漏，而不是靠运行时副作用。
 var registry = map[string]Channel{
-	KindDingTalk: dingTalkChannel{},
-	KindFeishu:   feishuChannel{},
-	KindWeCom:    weComChannel{},
-	KindWebhook:  webhookChannel{},
-	KindTelegram: telegramChannel{},
-	KindEmail:    emailChannel{},
+	KindDingTalk:   dingTalkChannel{},
+	KindFeishu:     feishuChannel{},
+	KindWeCom:      weComChannel{},
+	KindWechatClaw: wechatClawChannel{},
+	KindWebhook:    webhookChannel{},
+	KindTelegram:   telegramChannel{},
+	KindEmail:      emailChannel{},
 }
 
 // Get 按类型取渠道实现。

@@ -44,6 +44,9 @@ type Server struct {
 	engine     *Engine
 	ctx        context.Context
 
+	wechatClawMu     sync.Mutex
+	wechatClawLogins map[string]*wechatClawPending
+
 	skillDir  string // root directory for skill subdirectories
 	jwtKey    []byte // HS256 signing key loaded from / generated into dataDir/jwt.key
 	basicAuth basicAuthGate
@@ -878,6 +881,8 @@ func (s *Server) Handler() http.Handler {
 	// 漏洞 IM 推送。渠道是「多实例 + 各自过滤规则」的资源，因此独立成一组
 	// REST 接口，而不是塞进扁平的 /api/settings 键值里。
 	mux.HandleFunc("GET /api/notify/meta", s.notifyMeta)
+	mux.HandleFunc("POST /api/notify/wechat-claw/login", s.notifyWechatClawStart)
+	mux.HandleFunc("POST /api/notify/wechat-claw/login/{id}", s.notifyWechatClawPoll)
 	mux.HandleFunc("GET /api/notify/channels", s.notifyListChannels)
 	mux.HandleFunc("POST /api/notify/channels", s.notifyCreateChannel)
 	mux.HandleFunc("PATCH /api/notify/channels/{id}", s.notifyUpdateChannel)

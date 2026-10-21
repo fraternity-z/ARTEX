@@ -31,6 +31,7 @@ import {
 import { ConfigField, FilterSummary } from "./_components/channel-form";
 import { DeliveryList } from "./_components/delivery-list";
 import { formatBacklog, StatTile } from "./_components/stat-tile";
+import { WechatClawBinding } from "./_components/wechat-claw-binding";
 
 // 本页只负责编排：加载数据、维护表单状态、调用接口。
 // 字段定义与解析在 _components/channel-fields.ts，控件与过滤摘要在
@@ -46,6 +47,10 @@ export default function NotifyPage() {
   const [form, setForm] = React.useState<ChannelForm>(emptyForm("dingtalk"));
   const [saving, setSaving] = React.useState(false);
   const [testing, setTesting] = React.useState(false);
+  const [binding, setBinding] = React.useState(false);
+  const bindWechatClaw = React.useCallback((config: Record<string, unknown>) => {
+    setForm((f) => ({ ...f, config }));
+  }, []);
 
   const [globalSaving, setGlobalSaving] = React.useState(false);
   const [baseURL, setBaseURL] = React.useState("");
@@ -201,7 +206,7 @@ export default function NotifyPage() {
     setTesting(true);
     try {
       const r = await api.notifyTestChannel(editing.id);
-      toast.success(`已发出测试消息（${r.latency_ms} ms），请到群里确认`);
+      toast.success(`已发出测试消息（${r.latency_ms} ms），请到接收端确认`);
     } catch (e) {
       // 后端把渠道返回的原始错误如实回传，这是排查配置的唯一线索，原样展示。
       toast.error("测试失败：" + (e as Error).message, { duration: 12000 });
@@ -461,7 +466,17 @@ export default function NotifyPage() {
                 />
               </div>
 
-              {fields.length === 0 ? (
+              {form.kind === "wechat_claw" ? (
+                open && (
+                  <WechatClawBinding
+                    key={editing?.id ?? "new"}
+                    config={form.config}
+                    disabled={saving}
+                    onBound={bindWechatClaw}
+                    onBusy={setBinding}
+                  />
+                )
+              ) : fields.length === 0 ? (
                 <p className="text-muted-foreground text-sm">
                   该渠道的表单尚未定义（前端缺 CHANNEL_FIELDS 条目），请补全后再试。
                 </p>
@@ -588,11 +603,11 @@ export default function NotifyPage() {
             </div>
 
             <div className="flex gap-2 pt-2 pb-6">
-              <Button onClick={saveForm} disabled={saving}>
+              <Button onClick={saveForm} disabled={saving || binding}>
                 {editing ? "保存" : "添加"}
               </Button>
               {editing && (
-                <Button variant="outline" onClick={testChannel} disabled={testing}>
+                <Button variant="outline" onClick={testChannel} disabled={testing || binding}>
                   <SendIcon /> 发送测试消息
                 </Button>
               )}

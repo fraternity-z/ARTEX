@@ -1015,6 +1015,12 @@ export interface NotificationChannel {
   secret_keys: string[];
 }
 
+export interface WechatClawLoginResult {
+  status: "wait" | "scanned" | "activating" | "confirmed" | "expired" | "failed";
+  message?: string;
+  config?: Record<string, unknown>;
+}
+
 // NotificationKind 是 /api/notify/meta 返回的渠道类型元数据。
 export interface NotificationKind {
   kind: string;
