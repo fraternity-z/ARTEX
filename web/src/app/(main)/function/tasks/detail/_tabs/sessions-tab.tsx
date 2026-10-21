@@ -478,7 +478,7 @@ function WorkerAssetBadge({ assets }: { assets: IntentAsset[] }) {
   );
 }
 
-export function SessionsTab({ taskId }: { taskId: string }) {
+export function SessionsTab({ taskId, initialSession = "" }: { taskId: string; initialSession?: string }) {
   const approvalFocus = useApprovalFocus({ taskId });
   const [selectedSessionId, setActiveId] = React.useState(MAIN_ID);
   const focusSession = React.useMemo<Session | undefined>(() => {
@@ -1545,6 +1545,29 @@ export function SessionsTab({ taskId }: { taskId: string }) {
   }
 
   const mainLoaded = !!store[currentMainKey]?.loaded;
+  React.useEffect(() => {
+    if (!mainLoaded || !initialSession) return;
+    if (initialSession === "plan") {
+      setActiveId(PLANNER_ID);
+    } else if (/^intent:[1-9]\d*$/.test(initialSession)) {
+      const id = initialSession.slice(7);
+      setLocatedSession({
+        taskId,
+        session: {
+          id,
+          intent_id: id,
+          role: "worker",
+          title: `Worker #${id}`,
+          status: "done",
+          live: false,
+          last_activity: "",
+        },
+      });
+      setActiveId(id);
+    } else if (/^main:\d+$/.test(initialSession)) {
+      setActiveId(mainSessionId(Number(initialSession.slice(5))));
+    }
+  }, [taskId, initialSession, mainLoaded]);
   // 发送键位由系统设置决定（localStorage），默认 Enter 发送。
   const sendMode = useChatSendMode();
   // What the transcript pane should show for the active session.

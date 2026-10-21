@@ -141,18 +141,23 @@ type EnrichTrigger interface {
 // findings under "facts" (record_fact → Facts, insert_assets → Assets,
 // report_finding → Findings; each element of a batch counts once).
 type WriteCounts struct {
-	Facts    int
-	Assets   int
-	Findings int
+	Facts        int
+	Assets       int
+	Findings     int
+	Intelligence int
 }
 
 // Total is every node persisted this run, regardless of kind — the
 // "explored but persisted nothing" signal (Total == 0).
-func (w WriteCounts) Total() int { return w.Facts + w.Assets + w.Findings }
+func (w WriteCounts) Total() int { return w.Facts + w.Assets + w.Findings + w.Intelligence }
 
 // String renders the per-kind breakdown for logs, e.g. "事实1 资产25 漏洞0".
 func (w WriteCounts) String() string {
-	return fmt.Sprintf("事实%d 资产%d 漏洞%d", w.Facts, w.Assets, w.Findings)
+	summary := fmt.Sprintf("事实%d 资产%d 漏洞%d", w.Facts, w.Assets, w.Findings)
+	if w.Intelligence > 0 {
+		summary += fmt.Sprintf(" 情报%d", w.Intelligence)
+	}
+	return summary
 }
 
 // Writes reports what this run wrote back, split by node kind (so the engine can
@@ -1304,12 +1309,13 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 // must NOT be stuffed into the asset graph via upsert_asset.
 // factItem 是 record_fact 批量/单条的一条事实。
 type factItem struct {
-	Summary    string            `json:"summary"`
-	Detail     string            `json:"detail"`
-	Evidence   string            `json:"evidence"`   // 一行关键证据（命令+关键输出行），支撑结论、便于事后核对
-	Confidence string            `json:"confidence"` // observed（直接看到）| inferred（据现象推断）
-	IntentID   json.RawMessage   `json:"intent_id"`
-	AssetIDs   []json.RawMessage `json:"asset_ids"`
+	Summary      string                 `json:"summary"`
+	Detail       string                 `json:"detail"`
+	Evidence     string                 `json:"evidence"`   // 一行关键证据（命令+关键输出行），支撑结论、便于事后核对
+	Confidence   string                 `json:"confidence"` // observed（直接看到）| inferred（据现象推断）
+	IntentID     json.RawMessage        `json:"intent_id"`
+	AssetIDs     []json.RawMessage      `json:"asset_ids"`
+	Intelligence []db.IntelligenceInput `json:"intelligence"`
 }
 
 // recordOneFact 写一条 fact 节点并连到意图（intent→yields→fact）。defaultIntent 为
@@ -1367,12 +1373,14 @@ func (t *ToolSet) recordFact() actool.CoreTool {
 			"confidence": str("observed（输出里直接看到）| inferred（据现象推断）。否定结论务必如实标注。"),
 			"asset_ids":  map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "相关资产 id（可选，0/1/多个）：该事实涉及哪些资产"},
 		}),
-		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
+		func(ctx context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct {
 				Facts    []factItem `json:"facts"`
 				factItem            // 单条模式 + 批量默认 intent_id
 			}
-			_ = json.Unmarshal(in, &a)
+			if err := json.Unmarshal(in, &a); err != nil {
+				return actool.Errorf("无效事实参数"), nil
+			}
 			batch := len(a.Facts) > 0
 			items := a.Facts
 			if !batch {
@@ -1389,6 +1397,19 @@ func (t *ToolSet) recordFact() actool.CoreTool {
 					continue
 				}
 				ids[i] = id
+				if len(it.Intelligence) > 20 {
+					errs[strconv.Itoa(i)] = fmt.Sprintf("事实 #%d 已保存，情报每次最多 20 条", id)
+					continue
+				}
+				for _, intel := range it.Intelligence {
+					if len(intel.AssetIDs) == 0 {
+						intel.AssetIDs = pidList(it.AssetIDs)
+					}
+					if _, err := t.saveIntelligence(ctx, id, intel); err != nil {
+						errs[strconv.Itoa(i)] = fmt.Sprintf("事实 #%d 已保存，情报未保存：%s", id, err)
+						break
+					}
+				}
 			}
 
 			if !batch { // 单条：保持原返回
@@ -2038,7 +2059,7 @@ func (t *ToolSet) PlannerTools() []actool.CoreTool {
 		t.getWorkerOutput(), t.getWorkerTrace(), t.searchAllWorkerTraces(), t.listGoals(), t.addIntent(), t.proveGoal(), t.goalMet(),
 		t.killWorkTool(), t.steerWorkTool(),
 		// report_finding：规划态势研判时若自身已确证漏洞，可直接登记（与 worker 同工具）。
-		t.addFinding(),
+		t.addFinding(), t.recordIntelligence(),
 		// list_companies：查看企业列表 + scope + 资产数（拿 company_id / 理解归属范围）。
 		t.listCompanies(),
 		// list_assets：规划时按 DSL 检索全资产库（配合 list_untested_assets 的"范围内未测"视角，

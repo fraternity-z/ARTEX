@@ -1304,6 +1304,9 @@ other_assets AS (
     JOIN exploration_nodes n ON n.id=ea.node_id
     JOIN tasks t ON t.exploration_id=n.exploration_id
     WHERE ea.asset_id=a.id AND t.id<>$1 AND t.deleted_at IS NULL
+  ) OR EXISTS (
+    SELECT 1 FROM task_intelligence intelligence JOIN tasks t ON t.id=intelligence.task_id
+    WHERE intelligence.asset_ids @> jsonb_build_array(a.id) AND t.id<>$1 AND t.deleted_at IS NULL
   )
 )
 SELECT COALESCE(a.domain,''), COALESCE(a.ip,''), COALESCE(a.url,''), true

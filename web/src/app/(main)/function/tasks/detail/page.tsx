@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArchiveIcon, ArrowLeftIcon, BrainIcon, CheckIcon, CircleAlertIcon, PauseIcon, PlayIcon } from "lucide-react";
 import { toast } from "sonner";
 
+import { IntelligencePanel } from "@/components/intelligence-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { TaskLLMProfileChain } from "@/components/task-llm-profile-chain";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -56,6 +57,7 @@ const TABS = [
   { value: "graph", label: "探索链路" },
   { value: "broadcast", label: "播报板" },
   { value: "findings", label: "发现" },
+  { value: "intelligence", label: "任务情报" },
   { value: "retests", label: "复测" },
   { value: "assets", label: "测试资产" },
   { value: "coverage", label: "资产覆盖图" },
@@ -209,7 +211,8 @@ function TaskDetailInner() {
   const [task, setTask] = React.useState<Task | null>(null);
   const [paused, setPaused] = React.useState(false);
   const [loaded, setLoaded] = React.useState(false);
-  const [tab, setTab] = React.useState("sessions");
+  const requestedTab = searchParams.get("tab") ?? "sessions";
+  const tab = TABS.some((item) => item.value === requestedTab) ? requestedTab : "sessions";
   const [interceptPendingCount, setInterceptPendingCount] = React.useState(0);
   const [profiles, setProfiles] = React.useState<LLMProfile[]>([]);
   const [archiving, setArchiving] = React.useState(false);
@@ -348,7 +351,15 @@ function TaskDetailInner() {
   );
 
   return (
-    <Tabs value={tab} onValueChange={setTab} className="flex flex-1 flex-col gap-0">
+    <Tabs
+      value={tab}
+      onValueChange={(value) => {
+        const params = new URLSearchParams(searchParams);
+        params.set("tab", value);
+        router.replace(`/function/tasks/detail?${params}`, { scroll: false });
+      }}
+      className="flex flex-1 flex-col gap-0"
+    >
       {/* Top fixed area */}
       <header className="sticky top-0 z-10 flex flex-col gap-2 border-b bg-background/95 px-4 py-2.5 backdrop-blur lg:px-6">
         <div className="flex items-center gap-2">
@@ -418,7 +429,7 @@ function TaskDetailInner() {
       {/* Tab content */}
       <div className="flex-1 p-4 lg:p-6">
         <TabsContent value="sessions" className="mt-0">
-          <SessionsTab taskId={id} />
+          <SessionsTab taskId={id} initialSession={searchParams.get("session") ?? ""} />
         </TabsContent>
         <TabsContent value="overview" className="mt-0">
           <OverviewTab taskId={id} />
@@ -431,6 +442,9 @@ function TaskDetailInner() {
         </TabsContent>
         <TabsContent value="findings" className="mt-0">
           <FindingsTab taskId={id} />
+        </TabsContent>
+        <TabsContent value="intelligence" className="mt-0">
+          <IntelligencePanel key={id} taskId={id} />
         </TabsContent>
         <TabsContent value="retests" className="mt-0">
           <RetestsTab key={id} taskId={id} />

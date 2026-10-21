@@ -752,6 +752,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/tasks/{id}/assets", s.attachTaskAssets)
 	mux.HandleFunc("DELETE /api/tasks/{id}/assets/{assetID}", s.detachTaskAsset)
 	mux.HandleFunc("GET /api/tasks/{id}/intent-assets", s.taskIntentAssets)
+	mux.HandleFunc("GET /api/tasks/{id}/intelligence", s.listIntelligence)
+	mux.HandleFunc("GET /api/tasks/{id}/intelligence/{intelID}", s.getIntelligence)
+	mux.HandleFunc("PATCH /api/tasks/{id}/intelligence/{intelID}", s.updateIntelligence)
 
 	// 工作空间文件管理器（针对 workDir）
 	mux.HandleFunc("GET /api/workspace/list", s.wsList)
@@ -3416,6 +3419,8 @@ func (s *Server) settingsPayload() map[string]any {
 		// 实验功能:noa 模型驱动上下文压缩(默认关)。开启后平台接入的四类 agent 由 noa
 		// 接管上下文压缩,取代内置 compaction;每 run 读一次,对之后启动的 run 生效。
 		"noa_compaction": s.m.NoaCompactionEnabled(),
+		// 自动记录任务情报；关闭后保留已有记录。
+		"task_intelligence_enabled": s.m.pg.GetBool(db.SettingTaskIntelligence, false),
 		// 漏洞 IM 推送的全局项。渠道本身是独立资源，走 /api/notify/* 管理；
 		// 这里只放「作用于全部渠道」的三项。
 		"notify_enabled":             s.m.pg.GetBool(settingNotifyEnabled, true),
@@ -3465,6 +3470,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		TrafficCapture      *bool `json:"traffic_capture"`
 		AgentTrafficBinding *bool `json:"agent_traffic_binding"`
+		TaskIntelligence    *bool `json:"task_intelligence_enabled"`
 		LLMRecord           *bool `json:"llm_record"` // LLM 录制开关（默认关）；即时生效，无需重建 agent
 		// Web search. WebSearchEnabled/Backend toggle the tool + backend; BraveKey/TavilyKey
 		// are optional — omit (null) to leave a stored key untouched, send "" to clear.
@@ -3610,6 +3616,12 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if req.AgentTrafficBinding != nil {
 		if err := s.m.pg.SetBool(settingAgentTrafficBinding, *req.AgentTrafficBinding); err != nil {
 			writeErr(w, 500, err.Error())
+			return
+		}
+	}
+	if req.TaskIntelligence != nil {
+		if err := s.m.pg.SetBool(db.SettingTaskIntelligence, *req.TaskIntelligence); err != nil {
+			writeErr(w, 500, "任务情报设置保存失败")
 			return
 		}
 	}

@@ -15,8 +15,9 @@ import { api } from "@/lib/api";
 import { CHAT_SEND_MODE_OPTIONS, type ChatSendMode, setChatSendMode, useChatSendMode } from "@/lib/chat-send-mode";
 import type { Settings } from "@/lib/types";
 
-import { UpdateCard } from "./_components/update-card";
 import { BasicAuthCard } from "./_components/basic-auth-card";
+import { IntelligenceCard } from "./_components/intelligence-card";
+import { UpdateCard } from "./_components/update-card";
 
 export default function SystemSettingsPage() {
   const [trafficCapture, setTrafficCapture] = React.useState(false);
@@ -269,6 +270,7 @@ export default function SystemSettingsPage() {
       <div className="columns-1 gap-4 md:gap-6 lg:columns-2">
         <UpdateCard />
         <BasicAuthCard />
+        <IntelligenceCard />
 
         <Card className="mb-4 break-inside-avoid md:mb-6">
           <CardHeader>
