@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { CheckIcon, CopyIcon, FileTextIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, DownloadIcon, FileTextIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Markdown } from "@/components/markdown";
@@ -47,6 +47,27 @@ export function ReportTab({ taskId }: { taskId: string }) {
     }
   }
 
+  function download() {
+    if (loading || !report) return;
+    let url: string | undefined;
+    const a = document.createElement("a");
+    try {
+      url = URL.createObjectURL(new Blob([report], { type: "text/markdown;charset=utf-8" }));
+      a.href = url;
+      a.download = `report-${taskId}.md`;
+      document.body.appendChild(a);
+      a.click();
+    } catch {
+      toast.error("导出失败，请重试或复制 Markdown");
+    } finally {
+      a.remove();
+      if (url) {
+        const objectUrl = url;
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      }
+    }
+  }
+
   let content: React.ReactNode;
   if (loading) {
     content = (
@@ -72,15 +93,20 @@ export function ReportTab({ taskId }: { taskId: string }) {
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between">
+      <CardHeader className="flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <CardTitle className="flex items-center gap-2 text-sm">
           <FileTextIcon className="size-4" /> 渗透测试报告（Markdown）
         </CardTitle>
         <div className="flex gap-2">
-          {report && (
-            <Button size="sm" variant="outline" onClick={copy}>
-              {copied ? <CheckIcon /> : <CopyIcon />} 复制
-            </Button>
+          {!loading && report && (
+            <>
+              <Button size="sm" variant="outline" onClick={copy}>
+                {copied ? <CheckIcon /> : <CopyIcon />} 复制
+              </Button>
+              <Button size="sm" variant="outline" onClick={download}>
+                <DownloadIcon /> 导出 Markdown
+              </Button>
+            </>
           )}
         </div>
       </CardHeader>
